@@ -2,6 +2,7 @@ const DllLinkPlugin = require('dll-link-webpack-plugin');
 const VueLoaderPlugin = require('vue-loader/lib/plugin');
 const CleanWebpackPlugin = require('clean-webpack-plugin');
 const HtmlWebpackPlugin = require('html-webpack-plugin');
+const webpack = require('webpack')
 const util = require('./util');
 const path = require('path')
 const PROHtmlPlugins = () => {
@@ -35,7 +36,7 @@ module.exports = {
   resolve: {
     extensions: ['.js', '.vue', '.json'],
     alias: {
-      vue$: 'vue/dist/vue.runtime.esm.js',
+      vue$: 'vue/dist/vue.js',
       '@': util.resolve('src'),
       'packages':util.resolve('packages')
     },
@@ -103,7 +104,10 @@ module.exports = {
       config: require('./webpack.dll.conf.js'),
       htmlMode: true,
     }),
-    new VueLoaderPlugin()
+    new VueLoaderPlugin(),
+    new webpack.ProvidePlugin({
+      'd3': 'd3'
+    })
   ],
   stats: {
     children: false, // 避免过多子信息

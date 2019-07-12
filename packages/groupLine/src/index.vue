@@ -1,16 +1,15 @@
 <template>
   <div ref="pileUpChart" class="pileUpChart">
-     <ul class="groupLine" v-if="opt.showNav" >
-      <li v-for="(item,index) in copyData" :key="index" :class="{'groupLine_item':true,'hideNav':!item.show}" @click="triggerToTogglePath(item,index)">
+     <ul class="groupLine">
+      <li v-for="(item,index) in copyData" :key="item.color" :class="{'groupLine_item':true,'hideNav':!item.show}" @click="triggerToTogglePath(item,index)">
         <i :style="{'background':item.color}" class="colorBlock"></i>
-        <p class="groupLine_text" :style="{'color':'rgba(0,0,0.65)'}">{{item.name}}</p>
+        <p class="groupLine_text">{{item.name}}</p>
       </li>
     </ul>
   </div>
 </template>
 
 <script>
-import * as d3 from 'd3'
 import { colorList } from '@/utils/index'
 
 export default {
@@ -52,9 +51,11 @@ export default {
     }
   },
   watch: {
-    data(n, o) {
-      this.copyData = [...n]
-      this.packInit()
+    data: {
+      handler(n, o) {
+        this.copyData = [...n]
+        this.packInit()
+      }
     }
   },
   props: {
@@ -97,20 +98,20 @@ export default {
   },
   methods: {
     packInit() {
-      if (typeof window.requestIdleCallback !== 'undefined') {
-        window.requestIdleCallback(() => {
-          this.init()
-        })
-      } else {
-        this.init()
-      }
+      // if (typeof window.requestIdleCallback !== 'undefined') {
+      //   window.requestIdleCallback(() => {
+      //     this.init()
+      //   })
+      // } else {
+      this.init()
+      // }
     },
     init() {
       this.opt = Object.assign(this.opt, this.options)
       this.width = this.$refs.pileUpChart.clientWidth
       this.height = this.$refs.pileUpChart.clientHeight || 400
       const { width, height, copyData } = this
-      copyData.forEach((item, i) => { item.show = true; item.color = this.color[i] })
+      this.copyData.forEach((item, i) => { item.show = true; item.color = this.color[i] })
       // 计算最大值
       this.max = copyData.length ? Math.max(...copyData.map(item => Math.max(...item.dataList.map(ite => ite.value)))) : 100
       // 极限边界
@@ -262,14 +263,13 @@ export default {
           it.show = d.show = !toggle
           copyData.splice(idx, 1, it)
         })
-        .classed('hide', toggle)
         .attr('filter', 'url(#drop-shadow)')
+        .classed('hide', toggle)
         .transition()
-        .duration(500)
-        .ease(d3.easeLinear)
+        .duration(1000)
         .attr('stroke-dashoffset', toggle ? totalLength : 0)
-        .on('end', () => {
-          setTimeout(() => target.attr('filter', ''), 300)
+        .on('end', function () {
+          setTimeout(() => d3.select(this).attr('filter', ''), 300)
         })
     },
     async renderBody() {
@@ -277,7 +277,7 @@ export default {
         copyData, xScale, yScale, xStart, yStart, addLineShadow, addHoverEvent
       } = this
       const { curve, lineshadow } = this.opt
-      lineshadow && addLineShadow()
+      addLineShadow()
       // 创建折线
       const linePath = d3
         .line() // 折线
@@ -371,7 +371,7 @@ export default {
           .interrupt()
           .transition()
           .duration(100)
-          // .ease(d3.easeBackOut)
+          .ease(d3.easeBackOut)
           .attr(
             'transform',
             `translate(${design.x},${yStart})`
@@ -484,6 +484,7 @@ export default {
 <style lang="scss">
 .pileUpChart {
   height: calc(100%);
+}
   svg {
     cursor: pointer;
   }
@@ -555,5 +556,4 @@ export default {
   .tip-text {
     fill: #fff;
   }
-}
 </style>

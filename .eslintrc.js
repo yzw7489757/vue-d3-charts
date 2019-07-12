@@ -21,6 +21,9 @@ module.exports = {
       },
     },
   },
+  globals:{
+    "d3":true
+  },
   rules: {
     'no-param-reassign':0,
     'no-console':0,

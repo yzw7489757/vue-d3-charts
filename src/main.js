@@ -1,6 +1,7 @@
 import Vue from 'vue';
 import d3Chart from 'packages'
 import App from './App';
+import '@/styles/reset.css'
 
 Vue.use(d3Chart)
 Vue.config.productionTip = false;
