@@ -2,7 +2,7 @@
   <div ref="pileUpChart" class="pileUpChart">
      <ul class="groupLine">
       <li v-for="(item,index) in copyData" :key="item.color" :class="{'groupLine_item':true,'hideNav':!item.show}" @click="triggerToTogglePath(item,index)">
-        <i :style="{'background':item.color}" class="colorBlock"></i>
+        <i :style="{'background-color':item.color}" class="colorBlock"/>
         <p class="groupLine_text">{{item.name}}</p>
       </li>
     </ul>
@@ -16,13 +16,15 @@ export default {
   name: 'groupLine',
   data() {
     return {
-      width: 0,
-      height: 0,
       color: colorList(),
       svg: null,
-      xScale: null,
       chart: null,
-      max: 0,
+      xScale: null,
+      yScale: null,
+      xAxis: null,
+      yAxisR: null,
+      yAxisL: null,
+      gridAxis: null,
       margin: {
         left: 40,
         right: 20,
@@ -32,6 +34,7 @@ export default {
       copyData: [],
       opt: {
         curve: 1,
+        percentage: false, // 百分比模式
         lineshadow: false,
         axisY: 'left',
         ticks: 6,
@@ -53,8 +56,10 @@ export default {
   watch: {
     data: {
       handler(n, o) {
-        this.copyData = [...n]
-        this.packInit()
+        this.copyData = [...n].map((d, i) => ({
+          ...d, show: true, color: this.color[i]
+        }))
+        this.update()
       }
     }
   },
@@ -95,30 +100,52 @@ export default {
       const { data } = this
       return (data[0] && data[0].dataList.map(item => item.date)) || []
     },
+    height() {
+      return (this.$refs.pileUpChart && this.$refs.pileUpChart.clientHeight) || 400
+    },
+    width() {
+      return (this.$refs.pileUpChart && this.$refs.pileUpChart.clientWidth) || 0
+    },
+    max() {
+      return this.copyData.length ? Math.max(...this.copyData.map(item => Math.max(...item.dataList.map(ite => ite.value)))) : 100
+    }
   },
   methods: {
     packInit() {
-      // if (typeof window.requestIdleCallback !== 'undefined') {
-      //   window.requestIdleCallback(() => {
-      //     this.init()
-      //   })
-      // } else {
-      this.init()
-      // }
+      if (typeof window.requestIdleCallback !== 'undefined') {
+        window.requestIdleCallback(() => {
+          this.init()
+        })
+      } else {
+        this.init()
+      }
+    },
+    update() {
+      const { max, xLineList, svg } = this
+      const { percentage } = this.options
+      const _this = this
+      this.$nextTick(() => {
+        this.yAxisL.scale().domain([0, max])
+        this.yAxisR.scale().domain([0, max])
+        this.xAxis.scale().domain(xLineList)
+        const unit = axis => axis.tickFormat(percentage ? d3.format('.0%') : d3.formatPrefix('.0', max > 10000 ? 1e3 : 1))
+        svg.select('.yAxis_left').transition().duration(500).call(unit(_this.yAxisL))
+        svg.select('.yAxis_right').transition().duration(500).call(unit(_this.yAxisR))
+        svg.select('.xAxis').transition().duration(500).call(_this.xAxis)
+        svg.select('.grid').transition().duration(500).call(_this.gridAxis)
+        this.renderBody()
+      })
     },
     init() {
       this.opt = Object.assign(this.opt, this.options)
-      this.width = this.$refs.pileUpChart.clientWidth
-      this.height = this.$refs.pileUpChart.clientHeight || 400
-      const { width, height, copyData } = this
-      this.copyData.forEach((item, i) => { item.show = true; item.color = this.color[i] })
-      // 计算最大值
-      this.max = copyData.length ? Math.max(...copyData.map(item => Math.max(...item.dataList.map(ite => ite.value)))) : 100
+      const { width, height, color } = this
+      this.copyData = this.copyData.map((d, idx) => ({ ...d, show: true, color: color[idx] }))
       // 极限边界
       this.margin.left = Math.max(this.max.toString().length * 5, 40)
       this.margin.right = Math.max(this.max.toString().length * 5, this.margin.right)
       this.svg && this.svg.remove()
       this.svg = d3.select(this.$refs.pileUpChart).append('svg').attr('width', width).attr('height', height)
+      this.svg.append('g').attr('class', 'path')
       this.draw()
     },
     draw() {
@@ -138,33 +165,28 @@ export default {
       const {
         axisY, yAxisLine, xAxisLine, ticks, tickPadding, yAxisLongLine
       } = this.opt
+      const _this = this
       const yScale = this.yScale = d3.scaleLinear().range([chartHeight, 0]).domain([0, max])
+      const generateYAxis = scale => scale.scale(yScale).tickSize(tickPadding).ticks(ticks).tickFormat(d3.formatPrefix('.0', max > 10000 ? 1e3 : 1))
+      const yAxisL = this.yAxisL = generateYAxis(d3.axisLeft())
+      const yAxisR = this.yAxisR = generateYAxis(d3.axisRight())
+
       const xScale = this.xScale = d3.scaleBand().range([0, this.chartWidth]).domain(xLineList).padding(-1)
-      chart.append('g').attr('class', 'xAxis').attr('transform', `translate(${0},${chartHeight})`).call(
-        d3
-          .axisBottom(xScale)
-          .tickSize(2)
-          .tickPadding(5)
-      )
-      if (['right', 'all'].includes(axisY)) { chart.append('g').attr('class', 'yAxis right').attr('transform', `translate(${chartWidth},${0})`).call(d3.axisRight(yScale).tickSize(tickPadding).ticks(ticks).tickFormat(d3.formatPrefix('.0', max > 10000 ? 1e3 : 1))) }
-      if (['left', 'all'].includes(axisY)) { chart.append('g').attr('class', 'yAxis left').attr('transform', `translate(${0},${0})`).call(d3.axisLeft(yScale).tickSize(tickPadding).ticks(ticks).tickFormat(d3.formatPrefix('.0', max > 10000 ? 1e3 : 1))) }
-      this.svg.selectAll('g.yAxis path').attr('stroke', 'rgba(0,0,0,.4)').attr('stroke-width', yAxisLine ? 1 : 0)
+      const xAxis = this.xAxis = d3.axisBottom().scale(xScale).tickSize(2).tickPadding(5)
+      chart.append('g').attr('class', 'xAxis').attr('transform', `translate(${0},${chartHeight})`).call(xAxis)
+
+      if (['left', 'all'].includes(axisY)) { chart.append('g').attr('class', 'yAxis yAxis_left').attr('transform', `translate(${0},${0})`).call(yAxisL) }
+      if (['right', 'all'].includes(axisY)) { chart.append('g').attr('class', 'yAxis yAxis_right').attr('transform', `translate(${chartWidth},${0})`).call(yAxisR) }
+      this.chart.selectAll('g.yAxis path').attr('stroke', 'rgba(0,0,0,.4)').attr('stroke-width', Number(yAxisLine))
+      this.chart.selectAll('g.xAxis path').attr('stroke', 'rgba(0,0,0,.4)').attr('stroke-width', Number(yAxisLine))
       this.chart.selectAll('g.yAxis g.tick text').attr('class', 'yAxis_text').attr('color', 'rgba(0,0,0,.6)')
-      this.chart.selectAll('g.xAxis path').attr('stroke', 'rgba(0,0,0,.4)').attr('stroke-width', xAxisLine ? 1 : 0)
-      this.chart.selectAll('g.yAxis g.tick').each(function (d, i) {
-        if (!i) return
-        d3.select(this).append('line')
-          .classed('grid-line gridY', true)
-          .attr('x1', 0)
-          .attr('y1', 0)
-          .attr('stroke', '#e8e8e8')
-          .attr('stroke-width', 2)
-          .attr('stroke-dasharray', '4,2')
-          .attr('stroke-opacity', 0.6)
-          .attr('x2', chartWidth)
-          .attr('y2', 0)
-      })
+      this.gridAxis = d3.axisLeft().scale(yScale).tickSize(yAxisLine ? -chartWidth : 0, 0, 0).tickFormat('')
+        .tickPadding(0)
+        .ticks(ticks)
+      _this.chart.append('g').attr('class', 'grid').call(_this.gridAxis)
+
       this.lineShadow()
+      this.gaussianBlur()
       this.responseAxis()
       copyData.length ? this.renderBody() : this.noData()
     },
@@ -179,7 +201,7 @@ export default {
         yScale,
         chartHeight
       } = this
-      const defsShadow = svg.append('defs')
+      const defsShadow = svg.append('defs').attr('id', 'line_shadow')
       const areaPath = d3
         .area()
         .x((d, i) => xScale(d.date))
@@ -274,30 +296,37 @@ export default {
     },
     async renderBody() {
       const {
-        copyData, xScale, yScale, xStart, yStart, addLineShadow, addHoverEvent
+        copyData, xScale, yScale, xStart, yStart, gaussianBlur, addHoverEvent
       } = this
       const { curve, lineshadow } = this.opt
-      addLineShadow()
       // 创建折线
       const linePath = d3
         .line() // 折线
         .curve(d3.curveCardinal.tension(curve))
         .x(d => xScale(d.date))
         .y(d => yScale(d.value))
-      const shaodowPath = this.svg.append('g').attr('class', 'path')
-      await shaodowPath.selectAll('path').data(copyData).enter().append('path')
+      const shaodowPath = this.svg.select('.path')
+      const paths = shaodowPath.selectAll('path').data(copyData)
+      paths.enter().append('path')
+      paths.exit().remove()
+
+      await shaodowPath.selectAll('path')
         .attr('class', (d, i) => `path_line path_line_${i}`)
-        .attr('d', (d, i) => linePath(d.dataList))
-        .attr('fill', 'none')
-        .attr('stroke-width', 2)
-        .attr('stroke', (d, i) => d.color)
         .attr('transform', `translate(${xStart + xScale.bandwidth() / 2}, ${yStart})`)
+        .attr('d', (d, i) => {
+          if (i === 0)console.log(linePath(d.dataList))
+          return linePath(d.dataList)
+        })
+        .attr('stroke-width', 2)
+        .attr('fill', 'none')
+        .attr('stroke', (d, i) => d.color)
         .attr('stroke-dasharray', function (d, i) {
           return `${d3.select(this).node().getTotalLength()} ${d3.select(this).node().getTotalLength()}`
         })
         .attr('stroke-dashoffset', function (d, i) {
           return d3.select(this).node().getTotalLength()
         })
+        .interrupt()
         .transition()
         .duration(1000)
         .ease(d3.easeLinear)
@@ -306,9 +335,9 @@ export default {
         .attr('stroke-dashoffset', 0)
       await addHoverEvent()
     },
-    addLineShadow() {
+    gaussianBlur() {
       // 高斯滤镜
-      const defsFliter = this.svg.append('defs')
+      const defsFliter = this.svg.append('defs').attr('id', 'gaussian_blur')
       const filter = defsFliter
         .append('filter')
         .attr('id', 'drop-shadow')
@@ -484,7 +513,6 @@ export default {
 <style lang="scss">
 .pileUpChart {
   height: calc(100%);
-}
   svg {
     cursor: pointer;
   }
@@ -556,4 +584,14 @@ export default {
   .tip-text {
     fill: #fff;
   }
+  .grid {
+    .domain{
+      display: none;
+    }
+    .tick line{
+      stroke: #e8e8e8;
+    }
+  }
+}
+
 </style>
