@@ -1,7 +1,10 @@
 <template>
   <div ref="pileUpChart" class="pileUpChart">
      <ul class="groupLine">
-      <li v-for="(item,index) in copyData" :key="item.color" :class="{'groupLine_item':true,'hideNav':!item.show}" @click="triggerToTogglePath(item,index)">
+      <li v-for="(item,index) in copyData"
+        :key="item.color"
+        :class="{'groupLine_item':true,'hideNav':!item.show}"
+        @click="triggerToTogglePath(item,index)">
         <i :style="{'background-color':item.color}" class="colorBlock"/>
         <p class="groupLine_text">{{item.name}}</p>
       </li>
@@ -186,7 +189,7 @@ export default {
       _this.chart.append('g').attr('class', 'grid').call(_this.gridAxis)
 
       this.lineShadow()
-      this.gaussianBlur()
+      // this.gaussianBlur()
       this.responseAxis()
       copyData.length ? this.renderBody() : this.noData()
     },
@@ -372,10 +375,16 @@ export default {
         .attr('ry', 8)
         .attr('opacity', 0)
       // 鼠标移入指示线
-      let tipLine = this.svg.append('line').attr('class', 'tip-line')
+      const tipLine = this.svg.append('line').attr('class', 'tip-line')
       // 仿echarts圆点
       const circles = this.chart.append('g').classed('circleOfPath', true)
       const allCircle = circles.selectAll('circle').data(copyData).enter().append('circle')
+
+      tip.append('text')
+        .attr('class', 'tip-title')
+        .attr('x', 10)
+        .attr('y', 15)
+
       const mapx = xLineList.map((d, i) => ({
         x: xScale(d) + xStart + xScale.bandwidth() / 2,
         y: (yStart + chartHeight) / 2,
@@ -388,10 +397,10 @@ export default {
         const x = d3.event.offsetX
         const y = d3.event.offsetY
         const bw = xScale.step() / 2
-        const design = mapx.filter(item => Math.abs(x - item.x) < bw)[0]
-        if ((!design && !nowIndex) || (!design || (nowIndex === design.index))) return
-        nowIndex = design.index
-        design.y = y
+        const target = mapx.find(item => Math.abs(x - item.x) < bw)
+        if ((!target && !nowIndex) || (!target || (nowIndex === target.index))) return
+        nowIndex = target.index
+        target.y = y
         tipLine
           .attr('y1', chartHeight)
           .attr('y2', 5)
@@ -403,12 +412,12 @@ export default {
           .ease(d3.easeBackOut)
           .attr(
             'transform',
-            `translate(${design.x},${yStart})`
+            `translate(${target.x},${yStart})`
           )
           .attr('stroke', 'rgba(0,0,0,0.65)')
         // 设置文字
-        tip.select('.tip-text.title').text(design.d)
-        tip.selectAll('.tip-text.content').text((d, i) => `${d.name}:${d.dataList[design.index].value}`)
+        tip.select('.tip-title').text(target.d)
+        tip.selectAll('.tip-content').text((d, i) => `${d.name}:${d.dataList[target.index].value}`)
         let lastCy = 0
         tip.selectAll('.tip-circle-item').each(function (d, i) {
           if (i === copyData.filter(item => item.show).length - 1) {
@@ -416,11 +425,11 @@ export default {
           }
         })
 
-        allCircle.attr('cx', (d, i) => design.x - xStart).attr('cy', (d, i) => yScale(d.dataList[design.index].value)).attr('r', 1)
+        allCircle.attr('cx', (d, i) => target.x - xStart).attr('cy', (d, i) => yScale(d.dataList[target.index].value)).attr('r', 1)
           .attr('fill', (d, i) => d.color)
           .interrupt()
           .transition()
-          .duration(100)
+          .duration(300)
           .attr('r', 0)
           .transition()
           .duration(500)
@@ -428,15 +437,15 @@ export default {
           .attr('r', 6)
 
         const allTextWidth = []
-        svg.selectAll('.tip-text.content').each(function (d, i) {
+        svg.selectAll('.tip-content').each(function (d, i) {
           return allTextWidth.push(this.getBoundingClientRect().width)
         })
-        const tipTextMaxWidth = d3.max(allTextWidth)
 
-        const tipWidth = tipTextMaxWidth + 30
+        const tipWidth = d3.max(allTextWidth) + 30
         tip.select('.tip-border').attr('width', tipWidth)
-        // // 获取提示框应该出现的位置
-        const mouseX = design.x
+
+        // 获取提示框应该出现的位置
+        const mouseX = target.x
         const mouseY = y
         // 如果剩下的位置不够显示提示框就换个方向
         const tipX = mouseX + (((mouseX + tipWidth) > chartWidth) ? -tipWidth - 10 : 10)
@@ -463,25 +472,12 @@ export default {
           .attr('opacity', 0.9)
       })
         .on('mouseenter', () => {
-          tipLine = svg.selectAll('.tip-line').size() ? svg.select('.tip-line') : svg.append('line').attr('class', 'tip-line')
+          // tipLine = svg.selectAll('.tip-line').size() ? svg.select('.tip-line') : svg.append('line').attr('class', 'tip-line')
+          tipLine.attr('opacity', 1)
           tip.selectAll('.tip-text').remove()
-          tip.select('.tip-border').remove()
-          tip
-            .append('rect')
-            .attr('class', 'tip-border')
-            .attr('width', 0)
-            .attr('height', 0)
-            .attr('rx', 8)
-            .attr('ry', 8)
-            .attr('opacity', 0)
-          tip
+          tip.selectAll('.tip-content').data(copyData.filter(item => item.show)).enter()
             .append('text')
-            .attr('class', 'tip-text title')
-            .attr('x', 10)
-            .attr('y', 15)
-          tip.selectAll('.tip-text.content').data(copyData.filter(item => item.show)).enter()
-            .append('text')
-            .attr('class', 'tip-text content')
+            .attr('class', 'tip-content')
             .attr('x', 15)
             .attr('y', (d, i) => 35 + i * 20)
           tip.selectAll('.tip-circle-item').data(copyData.filter(item => item.show)).enter()
@@ -494,12 +490,14 @@ export default {
             .attr('fill', (d, i) => d.color)
         })
         .on('mouseleave', () => {
-          nowIndex = undefined
-          tip.selectAll('.tip-text').remove()
-          tip.select('.tip-border').remove()
-          tip.selectAll('.tip-circle-item').remove()
-          tipLine.remove()
+          nowIndex = null
+
+          tip.select('.tip-border').attr('opacity', 0)
+          tipLine.attr('opacity', 0)
           allCircle.interrupt().attr('r', 0)
+
+          tip.selectAll('.tip-content').remove()
+          tip.selectAll('.tip-circle-item').remove()
         })
     }
   },
@@ -546,6 +544,7 @@ export default {
     right: 0;
     justify-content: flex-end;
   }
+
   .groupLine_item {
     margin-right: 1vw;
     cursor: pointer;
@@ -570,20 +569,6 @@ export default {
     vertical-align: middle;
   }
 
-  @media (max-width: 576px) {
-    .groupLine {
-      position: relative;
-      flex-wrap: wrap;
-    }
-    .groupLine_item {
-      width: 25%;
-      padding: 0 10px;
-      white-space: nowrap;
-    }
-  }
-  .tip-text {
-    fill: #fff;
-  }
   .grid {
     .domain{
       display: none;
@@ -591,6 +576,9 @@ export default {
     .tick line{
       stroke: #e8e8e8;
     }
+  }
+  .tip-title,.tip-text,.tip-content{
+    fill: #fff;
   }
 }
 

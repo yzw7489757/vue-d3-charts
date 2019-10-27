@@ -55,5 +55,6 @@ body{
     margin:0;
 }
   #app{
+    padding: 30px;
   }
 </style>
